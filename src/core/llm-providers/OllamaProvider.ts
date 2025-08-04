@@ -1,15 +1,16 @@
 import { BaseLLMProvider, LLMGenerationOptions, LLMResponse, OllamaConfig } from '../../types/llm-providers';
 
-export class OllamaProvider extends BaseLLMProvider {
-  private ollamaConfig: OllamaConfig;
+export class OllamaProvider implements BaseLLMProvider {
+  public readonly type = 'ollama' as const;
+  public readonly name = 'Ollama';
+  public config: OllamaConfig;
 
   constructor(config: OllamaConfig) {
-    super(config, 'Ollama');
-    this.ollamaConfig = config;
+    this.config = config;
   }
 
   async generateResponse(options: LLMGenerationOptions): Promise<LLMResponse> {
-    const host = this.ollamaConfig.host || 'http://localhost:11434';
+    const host = (this.config as any).host || 'http://localhost:11434';
     
     try {
       // Convert messages to a single prompt for Ollama
@@ -58,8 +59,7 @@ export class OllamaProvider extends BaseLLMProvider {
           promptTokens: data.prompt_eval_count || 0,
           completionTokens: data.eval_count || 0,
           totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
-        },
-        model: data.model
+        }
       };
 
     } catch (error: any) {
@@ -82,6 +82,23 @@ export class OllamaProvider extends BaseLLMProvider {
     
     prompt += 'Assistant: ';
     return prompt;
+  }
+
+  getMaxTokens(): number {
+    // Ollama models vary, but most support at least 2048 tokens
+    const model = this.config.model || 'llama2';
+    if (model.includes('llama2:70b')) return 4096;
+    if (model.includes('llama2:13b')) return 4096;
+    if (model.includes('codellama:34b')) return 8192;
+    if (model.includes('codellama:13b')) return 4096;
+    if (model.includes('mistral')) return 8192;
+    if (model.includes('mixtral')) return 32768;
+    return 2048;
+  }
+
+  isAvailable(): boolean {
+    // Ollama doesn't require API keys, just needs to be running
+    return true;
   }
 
   isConfigured(): boolean {

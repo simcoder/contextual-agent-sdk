@@ -1,11 +1,12 @@
 import { BaseLLMProvider, LLMGenerationOptions, LLMResponse, AnthropicConfig } from '../../types/llm-providers';
 
-export class AnthropicProvider extends BaseLLMProvider {
-  private anthropicConfig: AnthropicConfig;
+export class AnthropicProvider implements BaseLLMProvider {
+  public readonly type = 'anthropic' as const;
+  public readonly name = 'Anthropic';
+  public config: AnthropicConfig;
 
   constructor(config: AnthropicConfig) {
-    super(config, 'Anthropic');
-    this.anthropicConfig = config;
+    this.config = config;
   }
 
   async generateResponse(options: LLMGenerationOptions): Promise<LLMResponse> {
@@ -22,7 +23,7 @@ export class AnthropicProvider extends BaseLLMProvider {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.config.apiKey,
-          'anthropic-version': this.anthropicConfig.version || '2023-06-01'
+          'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
           model: options.model || this.config.model || 'claude-3-sonnet-20240229',
@@ -62,13 +63,27 @@ export class AnthropicProvider extends BaseLLMProvider {
           promptTokens: data.usage.input_tokens,
           completionTokens: data.usage.output_tokens,
           totalTokens: data.usage.input_tokens + data.usage.output_tokens
-        } : undefined,
-        model: data.model
+        } : undefined
       };
 
     } catch (error: any) {
       throw new Error(`Anthropic API error: ${error.message}`);
     }
+  }
+
+  getMaxTokens(): number {
+    // Return max tokens based on model or default
+    const model = this.config.model || 'claude-3-sonnet-20240229';
+    if (model.includes('claude-3-opus')) return 200000;
+    if (model.includes('claude-3-sonnet')) return 200000;
+    if (model.includes('claude-3-haiku')) return 200000;
+    if (model.includes('claude-2')) return 100000;
+    if (model.includes('claude-instant')) return 100000;
+    return 100000;
+  }
+
+  isAvailable(): boolean {
+    return !!this.config.apiKey;
   }
 
   isConfigured(): boolean {

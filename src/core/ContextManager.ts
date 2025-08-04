@@ -6,18 +6,16 @@ export class ContextManager {
 
   constructor(config: ContextManagerConfig) {
     this.config = {
-      providers: [],
       maxTokens: 4096,
-      defaultFormatter: (ctx) => typeof ctx.content === 'string' ? ctx.content : JSON.stringify(ctx.content),
-      errorHandler: (error) => console.error('Context provider error:', error),
+      defaultFormatter: (ctx: ContextResult) => typeof ctx.content === 'string' ? ctx.content : JSON.stringify(ctx.content),
+      errorHandler: (error: Error) => console.error('Context provider error:', error),
       ...config
     };
 
     // Initialize providers
     this.config.providers.forEach(provider => {
-      const config = provider.getConfig();
-      if (config.enabled !== false) {
-        this.providers.set(config.id, provider);
+      if (provider.enabled !== false) {
+        this.providers.set(provider.id, provider);
       }
     });
   }
@@ -26,8 +24,7 @@ export class ContextManager {
    * Add a context provider
    */
   public addProvider(provider: ContextProvider): void {
-    const config = provider.getConfig();
-    this.providers.set(config.id, provider);
+    this.providers.set(provider.id, provider);
   }
 
   /**
@@ -43,8 +40,7 @@ export class ContextManager {
   public setProviderEnabled(providerId: string, enabled: boolean): void {
     const provider = this.providers.get(providerId);
     if (provider) {
-      const config = provider.getConfig();
-      config.enabled = enabled;
+      provider.enabled = enabled;
     }
   }
 
@@ -56,8 +52,8 @@ export class ContextManager {
 
     // Get context from each provider in parallel
     const contextPromises = Array.from(this.providers.values())
-      .filter(provider => provider.getConfig().enabled !== false)
-      .sort((a, b) => (b.getConfig().priority || 0) - (a.getConfig().priority || 0))
+      .filter(provider => provider.enabled !== false)
+      .sort((a, b) => (b.priority || 0) - (a.priority || 0))
       .map(async (provider) => {
         try {
           const context = await provider.getContext(params);
@@ -65,8 +61,11 @@ export class ContextManager {
             results.push({
               ...context,
               metadata: {
+                source: provider.id,
+                timestamp: new Date(),
+                tags: [],
                 ...context.metadata,
-                provider: provider.getConfig().id
+                provider: provider.id
               }
             });
           }

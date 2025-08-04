@@ -89,4 +89,19 @@ export interface ContextConfig {
     mergeBehavior?: 'append' | 'prepend' | 'replace';
     deduplicate?: boolean;
   };
+}
+
+// Context Manager Configuration
+export interface ContextManagerConfig {
+  providers: ContextProvider[];
+  maxTokens?: number;
+  defaultFormatter?: (ctx: ContextResult) => string;
+  errorHandler?: (error: Error, provider?: ContextProvider) => void;
+}
+
+// Provider configuration interface
+export interface ContextProviderConfig extends BaseConfig {
+  source: ContextSource;
+  getContext(params: Record<string, any>): Promise<ContextResult | null>;
+  formatContext?(result: ContextResult): string;
 } 

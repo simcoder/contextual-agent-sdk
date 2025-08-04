@@ -1,16 +1,19 @@
 import { BaseLLMProvider, LLMGenerationOptions, LLMResponse, OpenAIConfig } from '../../types/llm-providers';
 import OpenAI from 'openai';
 
-export class OpenAIProvider extends BaseLLMProvider {
+export class OpenAIProvider implements BaseLLMProvider {
+  public readonly type = 'openai' as const;
+  public readonly name = 'OpenAI';
+  public config: OpenAIConfig;
   private client?: OpenAI;
 
   constructor(config: OpenAIConfig) {
-    super(config, 'OpenAI');
+    this.config = config;
     
     if (config.apiKey) {
       this.client = new OpenAI({
         apiKey: config.apiKey,
-        organization: config.organization,
+        organization: (config as any).organization,
         baseURL: config.baseURL
       });
     }
@@ -47,13 +50,26 @@ export class OpenAIProvider extends BaseLLMProvider {
           promptTokens: completion.usage.prompt_tokens,
           completionTokens: completion.usage.completion_tokens,
           totalTokens: completion.usage.total_tokens
-        } : undefined,
-        model: completion.model
+        } : undefined
       };
 
     } catch (error: any) {
       throw new Error(`OpenAI API error: ${error.message}`);
     }
+  }
+
+  getMaxTokens(): number {
+    // Return max tokens based on model or default
+    const model = this.config.model || 'gpt-4';
+    if (model.includes('gpt-4-turbo')) return 128000;
+    if (model.includes('gpt-4')) return 8192;
+    if (model.includes('gpt-3.5-turbo-16k')) return 16384;
+    if (model.includes('gpt-3.5-turbo')) return 4096;
+    return 4096;
+  }
+
+  isAvailable(): boolean {
+    return !!this.client && !!this.config.apiKey;
   }
 
   isConfigured(): boolean {
