@@ -1,5 +1,6 @@
 // Core Types for Contextual Agent SDK
 import { StorageFactoryConfig } from '../storage/StorageFactory';
+import { ContextProvider } from './context';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type Modality = 'voice' | 'text';
@@ -124,6 +125,7 @@ export interface AgentConfig {
   voiceSettings?: VoiceSettings;
   llm?: LLMConfig;  // LLM provider configuration
   storage?: StorageFactoryConfig;  // Session storage configuration
+  contextProviders?: ContextProvider[];  // External knowledge and context sources
 }
 
 // LLM Configuration for the agent
@@ -233,6 +235,7 @@ export type AgentEventType =
   | 'message_sent'
   | 'modality_switched'
   | 'context_bridged'
+  | 'external_context_retrieved'
   | 'error_occurred'
   | 'performance_metric';
 

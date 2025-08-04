@@ -15,6 +15,7 @@ import { SessionStateManager } from './core/SessionStateManager';
 import { ContextBridge } from './core/ContextBridge';
 import { ModalityRouter } from './core/ModalityRouter';
 import { LLMManager, LLMManagerConfig } from './core/LLMManager';
+import { ContextManager } from './core/ContextManager';
 
 /**
  * ContextualAgent - Main SDK Class
@@ -34,6 +35,7 @@ export class ContextualAgent {
   private contextBridge: ContextBridge;
   private modalityRouter: ModalityRouter;
   private llmManager?: LLMManager;
+  private contextManager?: ContextManager;
   private eventListeners: Map<AgentEventType, Function[]> = new Map();
 
   constructor(config: AgentConfig, legacyOpenAIKey?: string) {
@@ -41,6 +43,9 @@ export class ContextualAgent {
     this.sessionManager = new SessionStateManager(config.storage);
     this.contextBridge = new ContextBridge();
     this.modalityRouter = new ModalityRouter();
+    
+    // Initialize Context Manager with external providers
+    this.initializeContextManager();
     
     // Initialize LLM Manager
     this.initializeLLMManager(legacyOpenAIKey);
@@ -85,7 +90,7 @@ export class ContextualAgent {
       // Update session with user message
       session = await this.sessionManager.updateSession(sessionId, userMessage, inputModality);
 
-      // THE CORE INNOVATION: Context bridging
+      // THE CORE INNOVATION: Context bridging + External Knowledge Integration
       let contextualPrompt = '';
       
       if (session.currentModality !== targetModality) {
@@ -108,10 +113,38 @@ export class ContextualAgent {
         contextualPrompt = await this.sessionManager.getConversationSummary(sessionId);
       }
 
-      // Generate AI response using OpenAI
+      // ENHANCEMENT: Add external knowledge context (Knowledge Base + Database)
+      let externalContext = '';
+      if (this.contextManager) {
+        try {
+          const contextResults = await this.contextManager.getContext({ 
+            query: userMessage.content,
+            sessionId: sessionId,
+            userId: userId,
+            modality: targetModality
+          });
+          
+          if (contextResults && contextResults.length > 0) {
+            externalContext = this.contextManager.formatContext(contextResults);
+            
+            this.emitEvent('external_context_retrieved', sessionId, {
+              contextSources: contextResults.length,
+              hasExternalKnowledge: true
+            });
+          }
+        } catch (error) {
+          console.error('Failed to retrieve external context:', error);
+          // Continue without external context - don't break the conversation
+        }
+      }
+
+      // Combine conversation context with external knowledge
+      const enhancedPrompt = this.combineContextSources(contextualPrompt, externalContext);
+
+      // Generate AI response using enhanced context (conversation + external knowledge)
       const responseContent = await this.generateResponse(
         userMessage.content,
-        contextualPrompt,
+        enhancedPrompt,
         targetModality
       );
 
@@ -198,6 +231,29 @@ export class ContextualAgent {
     const switchMessage = `Switching to ${newModality} mode. How can I help you?`;
     
     return this.processMessage(switchMessage, newModality, sessionId);
+  }
+
+  /**
+   * Initialize Context Manager with external knowledge providers
+   */
+  private initializeContextManager(): void {
+    if (!this.config.contextProviders || this.config.contextProviders.length === 0) {
+      // No context providers configured
+      return;
+    }
+
+    try {
+      this.contextManager = new ContextManager({
+        providers: this.config.contextProviders,
+        maxTokens: this.config.contextSettings?.contextWindowSize || 4000,
+        defaultFormatter: (ctx) => typeof ctx.content === 'string' ? ctx.content : JSON.stringify(ctx.content),
+        errorHandler: (error) => console.error('Context provider error:', error)
+      });
+
+      console.log(`Initialized ${this.config.contextProviders.length} context providers`);
+    } catch (error) {
+      console.error('Failed to initialize Context Manager:', error);
+    }
   }
 
   /**
@@ -288,6 +344,28 @@ export class ContextualAgent {
     }
 
     return prompt;
+  }
+
+  /**
+   * Combine conversation context with external knowledge sources
+   */
+  private combineContextSources(conversationContext: string, externalContext: string): string {
+    let combinedContext = '';
+
+    // Start with conversation context
+    if (conversationContext) {
+      combinedContext += `Conversation History:\n${conversationContext}`;
+    }
+
+    // Add external knowledge if available
+    if (externalContext) {
+      if (combinedContext) {
+        combinedContext += '\n\n';
+      }
+      combinedContext += `Relevant Knowledge:\n${externalContext}`;
+    }
+
+    return combinedContext;
   }
 
   /**
