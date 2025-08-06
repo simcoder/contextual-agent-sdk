@@ -36,8 +36,11 @@ export class LLMManager {
   private createProvider(name: string, config: LLMProviderConfig): LLMProvider | null {
     try {
       // Import provider dynamically based on type
-      const provider = require(`./llm-providers/${config.type}Provider`).default;
-      return new provider(config);
+      // Capitalize first letter to match PascalCase file names
+      const providerType = config.type.charAt(0).toUpperCase() + config.type.slice(1);
+      const providerModule = require(`./llm-providers/${providerType}Provider`);
+      const ProviderClass = providerModule[`${providerType}Provider`];
+      return new ProviderClass(config);
     } catch (error) {
       console.error(`Failed to create provider ${name}:`, error);
       return null;
