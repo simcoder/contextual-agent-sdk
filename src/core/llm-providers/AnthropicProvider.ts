@@ -10,6 +10,9 @@ export class AnthropicProvider implements BaseLLMProvider {
   }
 
   async generateResponse(options: LLMGenerationOptions): Promise<LLMResponse> {
+    console.log('Generating response with Anthropic provider');
+    console.log('Config:', this.config);
+    console.log('Options:', options);
     if (!this.config.apiKey) {
       throw new Error('Anthropic provider not configured. Please provide an API key.');
     }
