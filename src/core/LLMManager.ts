@@ -40,7 +40,10 @@ export class LLMManager {
       const providerType = config.type.charAt(0).toUpperCase() + config.type.slice(1);
       const providerModule = require(`./llm-providers/${providerType}Provider`);
       const ProviderClass = providerModule[`${providerType}Provider`];
-      return new ProviderClass(config);
+      
+      // Extract the nested config if it exists, otherwise use the config directly
+      const providerConfig = (config as any).config || config;
+      return new ProviderClass(providerConfig);
     } catch (error) {
       console.error(`Failed to create provider ${name}:`, error);
       return null;
