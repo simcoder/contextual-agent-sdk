@@ -16,6 +16,7 @@ import { ContextBridge } from './core/ContextBridge';
 import { ModalityRouter } from './core/ModalityRouter';
 import { LLMManager, LLMManagerConfig } from './core/LLMManager';
 import { ContextManager } from './core/ContextManager';
+import { ToolManager } from './core/ToolManager';
 
 /**
  * ContextualAgent - Main SDK Class
@@ -36,6 +37,7 @@ export class ContextualAgent {
   private modalityRouter: ModalityRouter;
   private llmManager?: LLMManager;
   private contextManager?: ContextManager;
+  private toolManager?: ToolManager; // Tool execution manager
   private eventListeners: Map<AgentEventType, Function[]> = new Map();
   private lastLLMResponse?: any; // Store last LLM response for token usage tracking
 
@@ -50,6 +52,11 @@ export class ContextualAgent {
     
     // Initialize LLM Manager
     this.initializeLLMManager(legacyOpenAIKey);
+
+    // Initialize Tool Manager (async)
+    this.initializeToolManager().catch(error => {
+      console.error('[ContextualAgent] Tool manager initialization failed:', error);
+    });
 
     this.initializeEventListeners();
   }
@@ -143,11 +150,39 @@ export class ContextualAgent {
       const enhancedPrompt = this.combineContextSources(contextualPrompt, externalContext);
 
       // Generate AI response using enhanced context (conversation + external knowledge)
-      const responseContent = await this.generateResponse(
+      let responseContent = await this.generateResponse(
         userMessage.content,
         enhancedPrompt,
         targetModality
       );
+
+      // TOOL EXECUTION: Check if response contains tool calls and execute them
+      if (this.toolManager) {
+        try {
+          const toolExecution = await this.toolManager.detectAndExecuteTools(
+            responseContent,
+            {
+              sessionId,
+              userId,
+              modality: targetModality
+            }
+          );
+
+          if (toolExecution.toolCalls.length > 0) {
+            // Tools were executed, use enhanced response
+            responseContent = toolExecution.enhancedResponse;
+            
+            this.emitEvent('tools_executed', sessionId, {
+              toolCalls: toolExecution.toolCalls.length,
+              toolResults: toolExecution.toolResults,
+              success: toolExecution.toolResults.every(r => r.success)
+            });
+          }
+        } catch (toolError) {
+          console.error('[ContextualAgent] Tool execution failed:', toolError);
+          // Continue with original response if tool execution fails
+        }
+      }
 
       // Prepare response in target modality
       const assistantMessage = await this.modalityRouter.prepareResponse(
@@ -254,6 +289,32 @@ export class ContextualAgent {
       console.log(`Initialized ${this.config.contextProviders.length} context providers`);
     } catch (error) {
       console.error('Failed to initialize Context Manager:', error);
+    }
+  }
+
+  /**
+   * Initialize Tool Manager with pre-configured tools
+   */
+  private async initializeToolManager(): Promise<void> {
+    if (!this.config.tools || this.config.tools.length === 0) {
+      // No tools configured
+      console.log('[ContextualAgent] No tools configured for this agent');
+      return;
+    }
+
+    try {
+      // Create tool manager
+      // All business logic and validation is handled by the platform backend
+      this.toolManager = new ToolManager(this.config.name);
+
+      // Initialize with ready-to-use tools from backend
+      this.toolManager.initializeTools(this.config.tools);
+
+      console.log(`[ContextualAgent] Tool manager initialized with ${this.config.tools.length} tools`);
+
+    } catch (error) {
+      console.error('[ContextualAgent] Failed to initialize tool manager:', error);
+      // Continue without tools rather than failing completely
     }
   }
 
@@ -455,7 +516,8 @@ export class ContextualAgent {
     // Initialize all event types
     const eventTypes: AgentEventType[] = [
       'session_started', 'session_ended', 'message_received', 'message_sent',
-      'modality_switched', 'context_bridged', 'error_occurred', 'performance_metric'
+      'modality_switched', 'context_bridged', 'error_occurred', 'performance_metric',
+      'tools_executed', 'external_context_retrieved'
     ];
 
     eventTypes.forEach(type => {
@@ -487,7 +549,12 @@ export class ContextualAgent {
       sessionManagement: true,
       eventSystem: true,
       llmProviders: this.llmManager?.getAvailableProviders() || [],
-      llmProviderStatus: this.llmManager?.getProviderStatus() || []
+      llmProviderStatus: this.llmManager?.getProviderStatus() || [],
+      toolIntegration: !!this.toolManager,
+      toolCapabilities: this.toolManager?.getStats() || {
+        totalTools: 0,
+        availableTools: []
+      }
     };
 
     return capabilities;
@@ -554,5 +621,10 @@ export class ContextualAgent {
     await this.sessionManager.shutdown();
     this.contextBridge.clearCache();
     this.eventListeners.clear();
+    
+    // Cleanup tool manager
+    if (this.toolManager) {
+      this.toolManager.cleanup();
+    }
   }
 } 

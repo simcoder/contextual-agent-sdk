@@ -114,6 +114,40 @@ export interface SessionMetadata {
   conversationQuality?: number;
 }
 
+// Tool Types
+export interface Tool {
+  /** Unique tool identifier */
+  id: string;
+  /** Human-readable tool name */
+  name: string;
+  /** Tool description */
+  description: string;
+  /** Execute the tool with given parameters */
+  execute(params: Record<string, any>, context?: ToolExecutionContext): Promise<ToolResult>;
+}
+
+export interface ToolResult {
+  /** Whether execution was successful */
+  success: boolean;
+  /** Result data if successful */
+  data?: any;
+  /** Error message if failed */
+  error?: string;
+  /** Additional metadata */
+  metadata?: Record<string, any>;
+}
+
+export interface ToolExecutionContext {
+  /** Agent ID executing the tool */
+  agentId: string;
+  /** Session ID if available */
+  sessionId?: string;
+  /** User ID if available */
+  userId?: string;
+  /** Additional context */
+  metadata?: Record<string, any>;
+}
+
 // Agent Configuration Types
 export interface AgentConfig {
   name: string;
@@ -126,6 +160,9 @@ export interface AgentConfig {
   llm?: LLMConfig;  // LLM provider configuration
   storage?: StorageFactoryConfig;  // Session storage configuration
   contextProviders?: ContextProvider[];  // External knowledge and context sources
+  
+  // Tool Integration (SIMPLIFIED)
+  tools?: Tool[];  // Ready-to-use tools provided by platform backend
 }
 
 // LLM Configuration for the agent
@@ -236,6 +273,7 @@ export type AgentEventType =
   | 'modality_switched'
   | 'context_bridged'
   | 'external_context_retrieved'
+  | 'tools_executed'
   | 'error_occurred'
   | 'performance_metric';
 
