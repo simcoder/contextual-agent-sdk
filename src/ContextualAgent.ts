@@ -37,6 +37,7 @@ export class ContextualAgent {
   private llmManager?: LLMManager;
   private contextManager?: ContextManager;
   private eventListeners: Map<AgentEventType, Function[]> = new Map();
+  private lastLLMResponse?: any; // Store last LLM response for token usage tracking
 
   constructor(config: AgentConfig, legacyOpenAIKey?: string) {
     this.config = config;
@@ -176,7 +177,7 @@ export class ContextualAgent {
 
       const responseMetadata: ResponseMetadata = {
         responseTime: Date.now() - startTime,
-        tokensUsed: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, // Would be filled by OpenAI
+        tokensUsed: this.lastLLMResponse?.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         modalityUsed: targetModality,
         contextBridgeTriggered: session.currentModality !== targetModality,
         processingSteps: [
@@ -320,9 +321,13 @@ export class ContextualAgent {
         maxTokens: targetModality === 'voice' ? 150 : 500 // Shorter for voice
       });
 
+      // Store the full response for token usage tracking
+      this.lastLLMResponse = response;
+
       return response.content || 'I apologize, but I cannot process your request right now.';
     } catch (error) {
       console.error('LLM API error:', error);
+      this.lastLLMResponse = undefined; // Clear stale data for mock responses
       return this.generateMockResponse(userMessage, targetModality);
     }
   }
