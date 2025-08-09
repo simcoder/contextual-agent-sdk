@@ -9,10 +9,15 @@ export { LLMManager } from './core/LLMManager';
 export { ContextManager } from './core/ContextManager';
 
 // LLM Providers
+export { BaseLLMProvider } from './core/llm-providers/BaseLLMProvider';
 export { OpenAIProvider } from './core/llm-providers/OpenAIProvider';
-export { AnthropicProvider } from './core/llm-providers/AnthropicProvider';
+export { AnthropicProvider } from './core/llm-providers/AnthropicProvider'; // 🚀 OFFICIAL SDK WITH TOOL SUPPORT
 export { OllamaProvider } from './core/llm-providers/OllamaProvider';
 export { GenericProvider } from './core/llm-providers/GenericProvider';
+
+// Tool and Conversation Management
+export { ConversationManager, conversationManager } from './core/conversation/ConversationManager';
+export { ToolConverter } from './core/tools/ToolConverter';
 
 // Context Providers
 export { KnowledgeBaseProvider } from './providers/KnowledgeBaseProvider';
@@ -77,6 +82,18 @@ export type {
   ToolResult,
   ToolExecutionContext
 } from './types';
+
+// Enhanced LLM and Tool Types
+export type {
+  LLMToolOptions,
+  LLMToolResponse,
+  LLMConversation,
+  LLMStreamChunk,
+  ToolCall,
+  ToolDefinition,
+  ConversationMessage,
+  ToolMessage
+} from './types/llm-providers';
 
 // Default export
 export { ContextualAgent as default } from './ContextualAgent'; 

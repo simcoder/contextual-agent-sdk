@@ -1,12 +1,23 @@
-import { BaseLLMProvider, LLMGenerationOptions, LLMResponse, OllamaConfig } from '../../types/llm-providers';
+import { LLMGenerationOptions, LLMResponse, OllamaConfig } from '../../types/llm-providers';
+import { BaseLLMProvider } from './BaseLLMProvider';
 
-export class OllamaProvider implements BaseLLMProvider {
+export class OllamaProvider extends BaseLLMProvider {
   public readonly type = 'ollama' as const;
   public readonly name = 'Ollama';
   public config: OllamaConfig;
 
   constructor(config: OllamaConfig) {
+    super();
     this.config = config;
+  }
+
+  // Override tool support
+  supportsTools(): boolean {
+    return false; // Ollama doesn't support tools yet
+  }
+
+  supportsStreaming(): boolean {
+    return false; // Will be true once we implement streaming
   }
 
   async generateResponse(options: LLMGenerationOptions): Promise<LLMResponse> {
@@ -96,7 +107,7 @@ export class OllamaProvider implements BaseLLMProvider {
     return 2048;
   }
 
-  isAvailable(): boolean {
+  async isAvailable(): Promise<boolean> {
     // Ollama doesn't require API keys, just needs to be running
     return true;
   }

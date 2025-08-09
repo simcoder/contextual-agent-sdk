@@ -24,7 +24,7 @@ export interface LLMProviderConfig {
 }
 
 export interface LLMMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
 }
 
@@ -45,11 +45,89 @@ export interface LLMResponse {
   finishReason?: string;
 }
 
+// Enhanced types for tool calling support
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
+}
+
+export interface ToolMessage extends LLMMessage {
+  role: 'tool';
+  content: string;
+  tool_call_id: string;
+}
+
+export interface ConversationMessage extends LLMMessage {
+  id?: string;
+  timestamp?: Date;
+  metadata?: Record<string, any>;
+}
+
+export interface LLMToolOptions extends LLMGenerateOptions {
+  tools?: ToolDefinition[];
+  toolChoice?: 'auto' | 'none' | { type: 'function', function: { name: string } };
+  conversation?: LLMConversation;
+}
+
+export interface LLMToolResponse extends LLMResponse {
+  toolCalls?: ToolCall[];
+  stopReason: 'stop' | 'tool_calls' | 'length' | 'content_filter';
+  conversation?: LLMConversation;
+}
+
+export interface ToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  };
+}
+
+export interface LLMConversation {
+  id: string;
+  messages: ConversationMessage[];
+  systemPrompt?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: Record<string, any>;
+}
+
+export interface LLMStreamChunk {
+  type: 'content' | 'tool_call' | 'error' | 'done';
+  content?: string;
+  toolCall?: Partial<ToolCall>;
+  error?: string;
+  done?: boolean;
+}
+
 export interface LLMProvider {
   type: LLMProviderType;
   getMaxTokens(): number;
   generateResponse(options: LLMGenerateOptions): Promise<LLMResponse>;
-  isAvailable?(): boolean;
+  
+  // Enhanced tool calling capabilities
+  generateWithTools?(options: LLMToolOptions): Promise<LLMToolResponse>;
+  streamResponse?(options: LLMGenerateOptions): AsyncIterable<LLMStreamChunk>;
+  streamWithTools?(options: LLMToolOptions): AsyncIterable<LLMStreamChunk>;
+  
+  // Tool and conversation support
+  supportsTools(): boolean;
+  supportsStreaming(): boolean;
+  createConversation(systemPrompt?: string): LLMConversation;
+  
+  // Tool execution loop (handles multiple tool calls)
+  handleToolLoop?(conversation: LLMConversation, tools: any[]): Promise<LLMToolResponse>;
+  
+  isAvailable?(): Promise<boolean>;
   test?(): Promise<void>;
 }
 

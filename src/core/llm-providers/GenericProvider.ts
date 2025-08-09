@@ -1,11 +1,22 @@
-import { LLMProvider, LLMProviderConfig, LLMGenerateOptions, LLMResponse } from '../../types/llm-providers';
+import { LLMProviderConfig, LLMGenerateOptions, LLMResponse } from '../../types/llm-providers';
+import { BaseLLMProvider } from './BaseLLMProvider';
 
-export class GenericProvider implements LLMProvider {
+export class GenericProvider extends BaseLLMProvider {
   public type: 'custom' = 'custom';
   private config: LLMProviderConfig;
 
   constructor(config: LLMProviderConfig) {
+    super();
     this.config = config;
+  }
+
+  // Override tool support
+  supportsTools(): boolean {
+    return false; // Generic provider doesn't support tools by default
+  }
+
+  supportsStreaming(): boolean {
+    return false; // Generic provider doesn't support streaming by default
   }
 
   getMaxTokens(): number {
@@ -55,12 +66,12 @@ export class GenericProvider implements LLMProvider {
     }
   }
 
-  isAvailable(): boolean {
+  async isAvailable(): Promise<boolean> {
     return !!this.config.baseURL;
   }
 
   async test(): Promise<void> {
-    if (!this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       throw new Error('Generic provider not configured');
     }
 

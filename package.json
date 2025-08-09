@@ -64,13 +64,16 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.59.0",
     "@types/mongodb": "^4.0.6",
+    "@types/uuid": "^10.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mongodb": "^6.18.0",
-    "openai": "^4.75.1",
+    "openai": "^4.0.0",
     "redis": "^5.7.0",
+    "uuid": "^11.1.0",
     "zod": "^3.24.1"
   },
   "peerDependencies": {

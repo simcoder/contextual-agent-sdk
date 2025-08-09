@@ -90,18 +90,21 @@ export class LLMManager {
     }
   }
 
-  public getProviderStatus(): Array<{
+  public async getProviderStatus(): Promise<Array<{
     name: string;
     available: boolean;
     isDefault: boolean;
     isFallback: boolean;
-  }> {
-    return Array.from(this.providers.entries()).map(([name, provider]) => ({
+  }>> {
+    const entries = Array.from(this.providers.entries());
+    const statusPromises = entries.map(async ([name, provider]) => ({
       name,
-      available: provider.isAvailable?.() ?? true,
+      available: provider.isAvailable ? await provider.isAvailable() : true,
       isDefault: name === this.defaultProvider,
       isFallback: name === this.fallbackProvider
     }));
+    
+    return Promise.all(statusPromises);
   }
 
   public async testProvider(name: string): Promise<{
