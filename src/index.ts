@@ -70,5 +70,23 @@ export {
 } from './utils/attribution';
 export type { AttributionInfo } from './utils/attribution';
 
+// Tool Integration (NEW - Optional feature)
+export { BaseToolProvider, ToolRegistry, ToolProviderUtils } from './tools';
+export type {
+  ToolProvider,
+  IToolRegistry,
+  Tool,
+  ToolCategory,
+  ToolCapability,
+  ToolCredentials,
+  ToolParams,
+  ToolResult,
+  ToolExecutionContext,
+  SubscriptionTier,
+  SubscriptionContext,
+  ToolAccessValidation,
+  ToolUsageStats
+} from './tools';
+
 // Default export
 export { ContextualAgent as default } from './ContextualAgent'; 
