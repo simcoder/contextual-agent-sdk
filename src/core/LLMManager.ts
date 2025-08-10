@@ -3,8 +3,12 @@ import {
   LLMProviderType,
   LLMProviderConfig,
   LLMGenerateOptions,
-  LLMResponse
+  LLMResponse,
+  LLMToolOptions,
+  LLMToolResponse,
+  ToolDefinition
 } from '../types/llm-providers';
+import { Tool } from '../types';
 
 export interface LLMManagerConfig {
   providers: Record<string, LLMProviderConfig>;
@@ -67,6 +71,136 @@ export class LLMManager {
       }
       throw error;
     }
+  }
+
+  /**
+   * 🔧 TOOL-AWARE GENERATION
+   * Use this method when tools are available for the agent
+   */
+  public async generateWithTools(options: LLMGenerateOptions, tools: Tool[]): Promise<LLMToolResponse> {
+    const provider = this.getCurrentProvider();
+    if (!provider) {
+      throw new Error('No LLM provider available');
+    }
+
+    // Check if provider supports tools
+    if (!provider.supportsTools()) {
+      console.log('⚠️  Provider does not support tools, falling back to basic generation');
+      const response = await this.generateResponse(options);
+      return {
+        ...response,
+        toolCalls: [],
+        stopReason: 'stop' as const
+      };
+    }
+
+    try {
+      // Use tool-aware generation
+      if (provider.generateWithTools) {
+        // Convert Tool[] to ToolDefinition[] format
+        const toolDefinitions: ToolDefinition[] = tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.id,
+            description: tool.description,
+            parameters: {
+              type: 'object',
+              properties: this.inferToolParameters(tool),
+              required: []
+            }
+          }
+        }));
+
+        return await provider.generateWithTools({
+          ...options,
+          tools: toolDefinitions
+        });
+      } else {
+        // Fallback to basic generation
+        const response = await provider.generateResponse(options);
+        return {
+          ...response,
+          toolCalls: [],
+          stopReason: 'stop' as const
+        };
+      }
+    } catch (error) {
+      if (this.fallbackProvider && this.fallbackProvider !== this.defaultProvider) {
+        const fallback = this.providers.get(this.fallbackProvider);
+        if (fallback && fallback.supportsTools() && fallback.generateWithTools) {
+          const toolDefinitions: ToolDefinition[] = tools.map(tool => ({
+            type: 'function',
+            function: {
+              name: tool.id,
+              description: tool.description,
+              parameters: {
+                type: 'object',
+                properties: this.inferToolParameters(tool),
+                required: []
+              }
+            }
+          }));
+
+          return await fallback.generateWithTools({
+            ...options,
+            tools: toolDefinitions
+          });
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if current provider supports tools
+   */
+  public supportsTools(): boolean {
+    const provider = this.getCurrentProvider();
+    return provider ? provider.supportsTools() : false;
+  }
+
+  /**
+   * Infer parameter schema from tool
+   */
+  private inferToolParameters(tool: Tool): Record<string, any> {
+    // Basic schema inference based on tool ID/description
+    if (tool.id.includes('sms') || tool.id.includes('twilio')) {
+      return {
+        to: {
+          type: 'string',
+          description: 'Phone number to send SMS to (E.164 format, e.g., +1234567890)'
+        },
+        message: {
+          type: 'string',
+          description: 'The message content to send'
+        }
+      };
+    }
+
+    if (tool.id.includes('email')) {
+      return {
+        to: {
+          type: 'string',
+          description: 'Email address to send to'
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject line'
+        },
+        body: {
+          type: 'string',
+          description: 'Email body content'
+        }
+      };
+    }
+
+    // Generic parameters for unknown tools
+    return {
+      input: {
+        type: 'string',
+        description: 'Input parameter for the tool'
+      }
+    };
   }
 
   public getCurrentProvider(): LLMProvider | undefined {

@@ -115,6 +115,7 @@ export class AnthropicProvider extends BaseLLMProvider {
 
   /**
    * 🔧 TOOL CALLING WITH OFFICIAL ANTHROPIC SDK
+   * Using the CORRECT official API from @anthropic-ai/sdk
    */
   async generateWithTools(options: LLMToolOptions): Promise<LLMToolResponse> {
     if (!this.client) {
@@ -131,7 +132,7 @@ export class AnthropicProvider extends BaseLLMProvider {
     }
 
     try {
-      // Convert SDK tools to Anthropic format
+      // Convert OpenAI-style tools to Anthropic SDK format
       const anthropicTools = options.tools.map(tool => ({
         name: tool.function.name,
         description: tool.function.description,
@@ -139,41 +140,42 @@ export class AnthropicProvider extends BaseLLMProvider {
       }));
 
       const systemMessage = options.messages.find(msg => msg.role === 'system');
-      const userMessages = options.messages.filter(msg => msg.role !== 'system');
+      const conversationMessages = options.messages.filter(msg => msg.role !== 'system');
 
-      console.log('🔧 Anthropic SDK Tool Request:', {
+      console.log('🔧 Anthropic SDK Tool Request (OFFICIAL API):', {
         model: this.config.model || 'claude-3-5-sonnet-20241022',
-        messages: userMessages.length,
+        messages: conversationMessages.length,
         tools: anthropicTools.map(t => ({ name: t.name, description: t.description })),
         system: !!systemMessage?.content
       });
 
+      // Use OFFICIAL Anthropic SDK API with tools parameter
       const response = await this.client.messages.create({
         model: this.config.model || 'claude-3-5-sonnet-20241022',
         max_tokens: options.maxTokens || this.config.defaultOptions?.maxTokens || 1000,
         temperature: options.temperature || this.config.defaultOptions?.temperature || 0.7,
-        messages: userMessages.map(msg => ({
+        messages: conversationMessages.map(msg => ({
           role: msg.role as 'user' | 'assistant',
           content: msg.content
         })),
-        tools: anthropicTools,
+        tools: anthropicTools, // ✅ OFFICIAL TOOLS PARAMETER
         ...(systemMessage && { system: systemMessage.content })
       });
 
-      console.log('🔧 Anthropic SDK Tool Response:', {
+      console.log('🔧 Anthropic SDK Tool Response (OFFICIAL API):', {
         content_blocks: response.content.length,
         stop_reason: response.stop_reason,
         usage: response.usage,
         tool_use_blocks: response.content.filter(block => block.type === 'tool_use').length
       });
 
-      // Extract text content
+      // Extract text content from response
       const textContent = response.content
         .filter((block): block is Anthropic.TextBlock => block.type === 'text')
         .map(block => block.text)
         .join('');
 
-      // Extract tool calls
+      // Extract tool_use blocks and convert to our standard format
       const toolCalls = response.content
         .filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use')
         .map(block => ({
@@ -185,11 +187,12 @@ export class AnthropicProvider extends BaseLLMProvider {
           }
         }));
 
+      // Map Anthropic's stop_reason to our standard format
       const stopReason = response.stop_reason === 'tool_use' ? 'tool_calls' : 
                         response.stop_reason === 'max_tokens' ? 'length' :
                         'stop';
 
-      console.log('🎯 Extracted Tool Calls:', toolCalls.map(tc => ({ 
+      console.log('🎯 Extracted Tool Calls (OFFICIAL SDK):', toolCalls.map(tc => ({ 
         id: tc.id, 
         name: tc.function.name, 
         args: tc.function.arguments 
@@ -208,7 +211,7 @@ export class AnthropicProvider extends BaseLLMProvider {
         conversation: options.conversation
       };
     } catch (error: any) {
-      console.error('❌ Anthropic SDK Tool Error:', error);
+      console.error('❌ Anthropic SDK Tool Error (OFFICIAL API):', error);
       throw new Error(`Failed to generate response with tools: ${error.message}`);
     }
   }

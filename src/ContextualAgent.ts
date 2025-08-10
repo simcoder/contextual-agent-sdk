@@ -7,7 +7,8 @@ import {
   ResponseData,
   ResponseMetadata,
   AgentEvent,
-  AgentEventType
+  AgentEventType,
+  Tool
 } from './types';
 
 import { LLMProviderConfig } from './types/llm-providers';
@@ -150,7 +151,8 @@ export class ContextualAgent {
       const enhancedPrompt = this.combineContextSources(contextualPrompt, externalContext);
 
       // Generate AI response using enhanced context (conversation + external knowledge)
-      let responseContent = await this.generateResponse(
+      // 🔧 Use tool-aware generation if tools are available
+      let responseContent = await this.generateResponseWithToolSupport(
         userMessage.content,
         enhancedPrompt,
         targetModality
@@ -357,7 +359,101 @@ export class ContextualAgent {
   }
 
   /**
-   * Generate AI response using configured LLM providers
+   * 🔧 TOOL-AWARE RESPONSE GENERATION
+   * Uses tools if available, falls back to basic generation
+   */
+  private async generateResponseWithToolSupport(
+    userMessage: string,
+    context: string,
+    targetModality: Modality
+  ): Promise<string> {
+    if (!this.llmManager) {
+      return this.generateMockResponse(userMessage, targetModality);
+    }
+
+    try {
+      const systemPrompt = this.buildSystemPrompt(context, targetModality);
+      const baseOptions = {
+        messages: [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userMessage }
+        ],
+        temperature: 0.7,
+        maxTokens: targetModality === 'voice' ? 150 : 500
+      };
+
+      // Check if we have tools available and provider supports tools
+      const availableTools = this.getAvailableTools();
+      const hasTools = availableTools && availableTools.length > 0;
+      const providerSupportsTools = this.llmManager.supportsTools();
+
+      if (hasTools && providerSupportsTools) {
+        console.log(`🔧 Using tool-aware generation with ${availableTools.length} tools:`, 
+          availableTools.map(t => t.id));
+        
+        // Use tool-aware generation
+        const toolResponse = await this.llmManager.generateWithTools(baseOptions, availableTools);
+        
+        // Store the full response for token usage tracking
+        this.lastLLMResponse = toolResponse;
+
+        // If tool calls were made, execute them
+        if (toolResponse.toolCalls && toolResponse.toolCalls.length > 0) {
+          console.log(`🎯 LLM made ${toolResponse.toolCalls.length} tool call(s):`, 
+            toolResponse.toolCalls.map(tc => tc.function.name));
+          
+          let finalResponse = toolResponse.content || '';
+          
+          // Execute each tool call
+          for (const toolCall of toolResponse.toolCalls) {
+            const tool = availableTools.find(t => t.id === toolCall.function.name);
+            if (tool) {
+              try {
+                const params = JSON.parse(toolCall.function.arguments);
+                const result = await tool.execute(params, {
+                  agentId: this.config.name || 'unknown',
+                  sessionId: userMessage, // Use message as session context
+                  metadata: { toolCallId: toolCall.id }
+                });
+
+                if (result.success) {
+                  const resultText = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+                  finalResponse += `\n\n✅ ${tool.name}: ${resultText}`;
+                } else {
+                  finalResponse += `\n\n❌ ${tool.name} failed: ${result.error}`;
+                }
+              } catch (error: any) {
+                finalResponse += `\n\n❌ ${tool.name} error: ${error.message}`;
+              }
+            }
+          }
+          
+          return finalResponse;
+        }
+
+        return toolResponse.content || 'I apologize, but I cannot process your request right now.';
+      } else {
+        // Use basic generation
+        if (!providerSupportsTools) {
+          console.log('⚠️  Provider does not support tools, using basic generation');
+        } else {
+          console.log('📝 No tools available, using basic generation');
+        }
+        
+        const response = await this.llmManager.generateResponse(baseOptions);
+        this.lastLLMResponse = response;
+        return response.content || 'I apologize, but I cannot process your request right now.';
+      }
+    } catch (error) {
+      console.error('LLM API error:', error);
+      this.lastLLMResponse = undefined;
+      return this.generateMockResponse(userMessage, targetModality);
+    }
+  }
+
+  /**
+   * Generate AI response using configured LLM providers (LEGACY)
+   * This method is kept for backward compatibility
    */
   private async generateResponse(
     userMessage: string,
@@ -612,6 +708,13 @@ export class ContextualAgent {
    */
   public getAvailableLLMProviders(): string[] {
     return this.llmManager?.getAvailableProviders() || [];
+  }
+
+  /**
+   * Get available tools for the agent
+   */
+  public getAvailableTools(): Tool[] {
+    return this.config.tools || [];
   }
 
   /**
