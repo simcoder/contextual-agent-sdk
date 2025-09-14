@@ -39,11 +39,27 @@ export class LLMManager {
 
   private createProvider(name: string, config: LLMProviderConfig): LLMProvider | null {
     try {
-      // Import provider dynamically based on type
-      // Capitalize first letter to match PascalCase file names
-      const providerType = config.type.charAt(0).toUpperCase() + config.type.slice(1);
-      const providerModule = require(`./llm-providers/${providerType}Provider`);
-      const ProviderClass = providerModule[`${providerType}Provider`];
+      // Robust dynamic import with explicit mapping for providers whose names aren't simple PascalCase
+      const typeKey = String(config.type).toLowerCase();
+      const providerMap: Record<string, { module: string; exportName: string }> = {
+        openai: { module: 'OpenAIProvider', exportName: 'OpenAIProvider' },
+        anthropic: { module: 'AnthropicProvider', exportName: 'AnthropicProvider' },
+        ollama: { module: 'OllamaProvider', exportName: 'OllamaProvider' },
+        generic: { module: 'GenericProvider', exportName: 'GenericProvider' }
+      };
+
+      const mapped = providerMap[typeKey];
+      if (!mapped) {
+        // Fallback to legacy PascalCase naming (first-letter upper only)
+        const legacy = config.type.charAt(0).toUpperCase() + config.type.slice(1);
+        const legacyModule = require(`./llm-providers/${legacy}Provider`);
+        const LegacyClass = legacyModule[`${legacy}Provider`] || legacyModule.default;
+        const providerConfig = (config as any).config || config;
+        return new LegacyClass(providerConfig);
+      }
+
+      const providerModule = require(`./llm-providers/${mapped.module}`);
+      const ProviderClass = providerModule[mapped.exportName] || providerModule.default;
       
       // Extract the nested config if it exists, otherwise use the config directly
       const providerConfig = (config as any).config || config;
